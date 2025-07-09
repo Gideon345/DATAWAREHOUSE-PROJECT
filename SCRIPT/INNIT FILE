@@ -1,0 +1,59 @@
+This script  first check for the existence of a database  and create a new  database 
+
+warning
+please do not run this script or this will delete the entire database
+
+
+-- ===============================================
+-- Script to Drop and Create 'datawarehouse' Database
+-- Also Creates Schemas: bronze, silver, gold
+-- ===============================================
+
+USE master;
+GO
+
+-- =========================================================
+-- Drop 'datawarehouse' database if it exists (safe check)
+-- =========================================================
+IF EXISTS (
+    SELECT 1 
+    FROM sys.databases 
+    WHERE name = 'datawarehouse'
+)
+BEGIN
+    -- Terminate connections before dropping (optional but recommended in real environments)
+    ALTER DATABASE datawarehouse SET SINGLE_USER WITH ROLLBACK IMMEDIATE;
+    DROP DATABASE datawarehouse;
+END
+GO
+
+-- ===============================
+-- Create 'datawarehouse' Database
+-- ===============================
+CREATE DATABASE datawarehouse;
+GO
+
+-- ===============================
+-- Switch Context to 'datawarehouse'
+-- ===============================
+USE datawarehouse;
+GO
+
+-- ===============================
+-- Create Schemas: bronze, silver, gold
+-- ===============================
+CREATE SCHEMA bronze;
+GO
+
+CREATE SCHEMA silver;
+GO
+
+CREATE SCHEMA gold;
+GO
+
+
+-- ====================================================================================
+-- Script to Create Tables in the 'bronze' Schema of the 'datawarehouse' Database
+-- Author: [Your Name] | Created: [Date]
+-- Purpose: Staging (raw) layer for customer, product, and ERP source data
+-- ====================================================================================
