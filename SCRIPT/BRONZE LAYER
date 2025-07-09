@@ -211,4 +211,3 @@ PRINT'=========================================='
 END CATCH
 END;
 
-EXEC BRONZE.LOAD_BRONZE;
