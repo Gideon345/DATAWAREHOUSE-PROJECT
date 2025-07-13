@@ -1,0 +1,72 @@
+INSERT INTO silver.crm_cust_info(
+cust_id,
+cust_key,
+cust_firstname,
+cust_lastname,
+cust_marital_status,
+cust_gend,
+cust_create_date)
+SELECT 
+       [cust_id],
+      [cust_key],
+      TRIM(cust_firstname) AS cust_firstname,
+      TRIM(cust_lastname) AS cust_lastname,
+     CASE
+  WHEN UPPER (TRIM(CUST_MARITAL_STATUS)) ='S' THEN 'SINGLE'
+   WHEN UPPER(TRIM(CUST_MARITAL_STATUS)) ='M' THEN 'MARRIED'
+   ELSE
+      'UNKNOWN'
+END AS CUST_MARITAL_STATUS
+  ,
+   
+     CASE
+  WHEN UPPER(TRIM(CUST_GEND)) ='F' THEN 'FEMALE'
+   WHEN UPPER(TRIM( CUST_GEND)) ='M' THEN 'MALE'
+   ELSE
+      'UNKNOWN'
+END AS CUST_GEND,
+      cust_create_date
+   FROM(
+	SELECT *,
+	ROW_NUMBER()OVER(PARTITION BY CUST_ID ORDER BY CUST_CREATE_DATE DESC) RANKING
+	FROM [datawarehouse].[bronze].[crm_cust_info]
+	) T
+WHERE RANKING =1 
+AND RANKING IS NOT NULL
+AND cust_id IS NOT NULL
+
+
+
+================================================
+INSERT INTO silver.crm_prod_info(
+PROD_ID,
+PROD_KEY,
+PRD_NM,
+CATERGORY_ID,
+SUB_CATEGORY_ID,
+PROD_COST,
+PROD_LINE,
+PROD_START,
+PROD_END)
+
+SELECT  [prod_id],
+        PROD_KEY,
+         prd_nm,
+      REPLACE(SUBSTRING(prod_key,1,5),'-','_' )AS CATERGORY_ID,
+      SUBSTRING(prod_key,7,LEN(PROD_KEY))  AS SUB_CATERGORY_ID
+      ,[prod_cost]
+      ,[prod_line]
+      ,[prod_start]
+      ,DATEADD(DAY,-1,LEAD(prod_start)OVER(partition by PROD_KEY ORDER BY PROD_START)) AS PROD_END
+  FROM [datawarehouse].[bronze].[crm_prod_info]
+
+
+  SELECT *
+  FROM [datawarehouse].[silver].[crm_prod_info]
+
+
+  
+
+
+
+
