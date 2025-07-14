@@ -1,72 +1,272 @@
-INSERT INTO silver.crm_cust_info(
-cust_id,
-cust_key,
-cust_firstname,
-cust_lastname,
-cust_marital_status,
-cust_gend,
-cust_create_date)
-SELECT 
-       [cust_id],
-      [cust_key],
-      TRIM(cust_firstname) AS cust_firstname,
-      TRIM(cust_lastname) AS cust_lastname,
-     CASE
-  WHEN UPPER (TRIM(CUST_MARITAL_STATUS)) ='S' THEN 'SINGLE'
-   WHEN UPPER(TRIM(CUST_MARITAL_STATUS)) ='M' THEN 'MARRIED'
-   ELSE
-      'UNKNOWN'
-END AS CUST_MARITAL_STATUS
-  ,
-   
-     CASE
-  WHEN UPPER(TRIM(CUST_GEND)) ='F' THEN 'FEMALE'
-   WHEN UPPER(TRIM( CUST_GEND)) ='M' THEN 'MALE'
-   ELSE
-      'UNKNOWN'
-END AS CUST_GEND,
-      cust_create_date
-   FROM(
-	SELECT *,
-	ROW_NUMBER()OVER(PARTITION BY CUST_ID ORDER BY CUST_CREATE_DATE DESC) RANKING
-	FROM [datawarehouse].[bronze].[crm_cust_info]
-	) T
-WHERE RANKING =1 
-AND RANKING IS NOT NULL
-AND cust_id IS NOT NULL
 
 
+CREATE OR ALTER PROCEDURE CLEANDATA AS
+BEGIN
+   BEGIN TRY
+    DECLARE @START_TIME DATETIME ,@END_TIME DATETIME
+--========================================
+--INSERTING CLEAN AND REFRESH DATA INTO silver.crm_cust_info
+--THIS DATA WAS SOURCE FROM .[bronze].[crm_cust_info]
+PRINT'LOADING TIME....' 
+SET @START_TIME = GETDATE();
+TRUNCATE TABLE silver.crm_cust_info;
 
-================================================
-INSERT INTO silver.crm_prod_info(
-PROD_ID,
-PROD_KEY,
-PRD_NM,
-CATERGORY_ID,
-SUB_CATEGORY_ID,
-PROD_COST,
-PROD_LINE,
-PROD_START,
-PROD_END)
-
-SELECT  [prod_id],
-        PROD_KEY,
-         prd_nm,
-      REPLACE(SUBSTRING(prod_key,1,5),'-','_' )AS CATERGORY_ID,
-      SUBSTRING(prod_key,7,LEN(PROD_KEY))  AS SUB_CATERGORY_ID
-      ,[prod_cost]
-      ,[prod_line]
-      ,[prod_start]
-      ,DATEADD(DAY,-1,LEAD(prod_start)OVER(partition by PROD_KEY ORDER BY PROD_START)) AS PROD_END
-  FROM [datawarehouse].[bronze].[crm_prod_info]
+insert into silver.crm_cust_info(
+cst_id,
+cst_key,
+cst_firstname,
+cst_lastname,
+cst_gndr,
+cst_marital_status,
+cst_create_date)
 
 
-  SELECT *
-  FROM [datawarehouse].[silver].[crm_prod_info]
+select 
+cst_id,
+cst_key,
+trim(cst_firstname) as cst_firstname,
+trim(cst_lastname) as cst_lastname,
 
+case 
+   when lower(trim(cst_gndr)) ='f' then 'female'
+   when lower(trim(cst_gndr)) ='m' then 'male'
+   else 
+     'unknown'
+end as cst_gndr,
 
-  
+case 
+   when lower(trim(cst_marital_status)) ='s' then 'single'
+   when lower(trim(cst_marital_status)) ='m' then 'married'
+   else 
+      'unknown'
+end as cst_marital_status,
+cst_create_date
+from(
+		select *,
+		row_number()over(partition by cst_id order by cst_create_date desc) ranking
+		from [Datawarehouse].[bronze].[crm_cust_info]) r
+where ranking =1
+and cst_id is not null;
+SET @END_TIME=GETDATE();
+  PRINT'END LOADING-----' +CAST(DATEDIFF(SECOND,@START_TIME,@END_TIME) AS NVARCHAR) +' SECONDS'
+--========================================
+-- DONE INSERTING CLEAN AND REFRESH DATA INTO silver.crm_cust_info
+--==================================================================
 
 
 
 
+--=====================================================
+--THIS DATA WAS SOURCE FROM .[bronze].[crm_prd_info]
+--INSERTING CLEAN AND REFRESH DATA INTO silver [crm_prd_info]
+PRINT'LOADING TIME....'
+SET @START_TIME = GETDATE();
+
+TRUNCATE TABLE silver.crm_prd_info;
+
+
+insert into [silver].[crm_prd_info](
+prd_id,
+prd_key,
+category_id,
+subcategory_id,
+prd_nm,
+prd_cost,
+prd_line,
+prd_start_dt,
+prd_end_dt)
+
+SELECT prd_id,
+      prd_key,
+      replace(substring(prd_key,1,5),'-','_') category_id,
+      substring(prd_key,7,len(prd_key)) subcategory_id,
+      [prd_nm]
+      ,[prd_cost]
+      ,[prd_line]
+      ,[prd_start_dt]
+      , dateadd(day,-1,lead(prd_start_dt)over(partition by prd_key order by prd_start_dt))prd_end_dt
+  FROM [Datawarehouse].[bronze].[crm_prd_info];
+  SET @END_TIME=GETDATE();
+    PRINT'END LOADING-----' + CAST(DATEDIFF(SECOND,@START_TIME,@END_TIME) AS NVARCHAR) +' SECONDS'
+  --========================================
+-- DONE INSERTING CLEAN AND REFRESH DATA INTO silver.[crm_prd_info]
+--==================================================================
+
+
+
+
+
+
+
+
+
+--=====================================================
+--THIS DATA WAS SOURCE FROM .[bronze]crm_sales_details
+--INSERTING CLEAN AND REFRESH DATA INTO silver crm_sales_details
+--==================================================================
+PRINT'LOADING TIME....'
+SET @START_TIME = GETDATE();
+TRUNCATE TABLE silver.crm_sales_details;
+
+insert into silver.crm_sales_details(
+sls_ord_num,
+sls_prd_key,
+sls_cust_id,
+sls_order_dt,
+sls_ship_dt,
+sls_due_dt,
+sls_sales,
+sls_quantity,
+sls_price)
+
+
+SELECT [sls_ord_num]
+      ,[sls_prd_key]
+      ,[sls_cust_id]
+      ,case
+    when len(sls_order_dt) != 8  or sls_order_dt < 0 then null
+    
+    else cast(sls_order_dt AS DATE)
+   end as sls_order_dt
+
+      ,case
+          when len(sls_ship_dt) != 8  or sls_ship_dt < 0 then null
+    
+         else cast(sls_ship_dt AS DATE)
+    end as sls_ship_dt
+
+      , case
+          when len(sls_due_dt) != 8  or sls_due_dt < 0 then null
+    
+         else cast(sls_due_dt AS DATE)
+    end as sls_due_dt
+      ,CASE
+        WHEN sls_sales IS NULL 
+             OR sls_sales <= 0 
+             OR sls_sales != sls_quantity * sls_price
+        THEN sls_quantity * ABS(sls_price)
+        ELSE sls_sales
+    END AS sls_sales
+
+      ,CASE 
+        WHEN sls_quantity IS NULL 
+             OR sls_quantity <= 0 
+             OR sls_quantity != sls_sales / NULLIF(sls_price, 0)
+        THEN ABS(sls_sales) / NULLIF(sls_price, 0)
+        ELSE sls_quantity
+    END AS sls_quantity,
+
+      CASE 
+        WHEN sls_price IS NULL 
+             OR sls_price <= 0 
+             OR sls_price != sls_sales / NULLIF(sls_quantity, 0)
+        THEN ABS(sls_sales) / NULLIF(sls_quantity, 0)
+        ELSE sls_price
+    END AS sls_price
+  FROM [Datawarehouse].[bronze].[crm_sales_details];
+  SET @END_TIME=GETDATE();
+    PRINT'END LOADING-----' + CAST(DATEDIFF(SECOND,@START_TIME,@END_TIME) AS NVARCHAR) +' SECONDS'
+  --========================================
+-- DONE INSERTING CLEAN AND REFRESH DATA INTO silver.crm_sales_details
+--==================================================================
+
+
+
+--=====================================================
+--THIS DATA WAS SOURCE FROM .[bronze]erp_cust_AZ12
+--INSERTING CLEAN AND REFRESH DATA INTO silver erp_cust_AZ12
+PRINT'LOADING TIME....'
+SET @START_TIME = GETDATE();
+
+TRUNCATE TABLE silver.erp_cust_AZ12;
+
+
+INSERT INTO silver.erp_cust_AZ12(
+CID,
+BDATE,
+GEND
+
+)
+select 
+
+ CASE 
+  WHEN CID LIKE 'NAS%' THEN SUBSTRING(CID,4,LEN(CID))
+  ELSE 
+     CID
+END AS CID,
+BDATE,
+
+ CASE 
+  WHEN GEND IN ('FEMALE','F') THEN 'FEMALE'
+  WHEN GEND IN ('MALE','M')THEN 'MALE'
+  ELSE
+     'UNKNOWN'
+END AS GEND
+from datawarehouse.bronze.erp_cust_AZ12;
+SET @END_TIME=GETDATE();
+  PRINT'END LOADING-----'  + CAST(DATEDIFF(SECOND,@START_TIME,@END_TIME) AS NVARCHAR) +' SECONDS'
+--=====================================================
+--THIS DATA WAS SOURCE FROM .[bronze]erp_PX_CAT_G1V2
+--INSERTING CLEAN AND REFRESH DATA INTO silver.erp_PX_CAT_G1V2
+PRINT'LOADING TIME....'
+SET @START_TIME = GETDATE();
+
+TRUNCATE TABLE silver.erp_PX_CAT_G1V2;
+
+
+INSERT INTO silver.erp_PX_CAT_G1V2(
+ID,
+CAT,
+SUBCAT,
+MAINTENANCE
+)
+SELECT  [ID]
+      ,[CAT]
+      ,[SUBCAT]
+      ,[MAINTENANCE]
+  FROM [Datawarehouse].[bronze].[erp_PX_CAT_G1V2];
+SET @END_TIME=GETDATE();
+  PRINT'END LOADING-----' + CAST(DATEDIFF(SECOND,@START_TIME,@END_TIME) AS NVARCHAR) +' SECONDS'
+  --========================================
+-- DONE INSERTING CLEAN AND REFRESH DATA INTO silver.erp_cust_AZ12
+--==================================================================
+
+
+
+
+--=====================================================
+--THIS DATA WAS SOURCE FROM .[bronze]
+--INSERTING CLEAN AND REFRESH DATA INTO silver [erp_LOC_A101]
+PRINT'LOADING TIME....'
+SET @START_TIME = GETDATE();
+TRUNCATE TABLE silver.erp_LOC_A101;
+
+INSERT INTO[silver].[erp_LOC_A101](
+CID,
+CNTRY
+)
+SELECT  
+REPLACE(CID,'-','') AS CID
+      ,   CASE 
+     WHEN TRIM(CNTRY) ='DE' THEN LOWER('GERMANY')
+     WHEN UPPER(TRIM (CNTRY))IN('US','USA') THEN LOWER('UNITED STATE')
+     WHEN TRIM(CNTRY)='' OR CNTRY IS NULL THEN LOWER('N\A')
+     ELSE 
+         LOWER(TRIM(CNTRY))
+END AS CNTRY
+  FROM [Datawarehouse].[bronze].[erp_LOC_A101];
+  SET @END_TIME=GETDATE();
+  PRINT'END LOADING-----' + CAST(DATEDIFF(SECOND,@START_TIME,@END_TIME) AS NVARCHAR) +' SECONDS'
+--========================================
+-- DONE INSERTING CLEAN AND REFRESH DATA INTO silver.[erp_LOC_A101]
+--==================================================================
+END TRY
+BEGIN CATCH
+PRINT'ERROR OCCURED' +ERROR_MESSAGE();
+PRINT'ERROR OCCURED' + CAST(ERROR_LINE() AS NVARCHAR);
+PRINT 'ERROR  OCURRED' +CAST( ERROR_STATE()AS NVARCHAR);
+
+END CATCH
+END;
+
+EXEC CLEANDATA
